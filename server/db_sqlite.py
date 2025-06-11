@@ -1,33 +1,37 @@
 import sqlite3
-from datetime import datetime
+import os
 
 class SQLiteHandler:
-    def __init__(self, db_file='log_db.sqlite'):
-        self.db_file = db_file
-        self.conn = None
+    def __init__(self, db_path='logs.db'):
+        self.db_path = db_path
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
 
     def init_db(self):
-        self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
-        self.conn.execute('''
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tag TEXT,
-                timestamp TEXT,
-                level TEXT,
-                message TEXT
-            )
-        ''')
-        self.conn.commit()
+        with self.conn:
+            self.conn.execute('''
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    application TEXT,
+                    tag TEXT,
+                    timestamp TEXT,
+                    level TEXT,
+                    message TEXT,
+                    user TEXT,
+                    module TEXT,
+                    host TEXT
+                )
+            ''')
 
-    def insert_log(self, tag, timestamp, level, message):
-        cur = self.conn.cursor()
-        cur.execute('INSERT INTO logs (tag, timestamp, level, message) VALUES (?, ?, ?, ?)',
-                    (tag, timestamp, level, message))
-        self.conn.commit()
+    def insert_log(self, application, tag, timestamp, level, message, user, module, host):
+        with self.conn:
+            self.conn.execute('''
+                INSERT INTO logs (application, tag, timestamp, level, message, user, module, host)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (application, tag, timestamp, level, message, user, module, host))
 
-    def get_logs(self, tag='', level=''):
-        cur = self.conn.cursor()
-        query = 'SELECT tag, timestamp, level, message FROM logs WHERE 1=1'
+    def get_logs(self, tag='', level='', application=''):
+        query = 'SELECT * FROM logs WHERE 1=1'
         params = []
         if tag:
             query += ' AND tag = ?'
@@ -35,16 +39,11 @@ class SQLiteHandler:
         if level:
             query += ' AND level = ?'
             params.append(level)
-        query += ' ORDER BY timestamp DESC LIMIT 100'
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        logs = []
-        for row in rows:
-            logs.append({
-                'tag': row[0],
-                'timestamp': row[1],
-                'level': row[2],
-                'message': row[3]
-            })
-        return logs
+        if application:
+            query += ' AND application = ?'
+            params.append(application)
 
+        query += ' ORDER BY timestamp DESC LIMIT 100'
+        cur = self.conn.cursor()
+        cur.execute(query, params)
+        return cur.fetchall()

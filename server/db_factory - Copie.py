@@ -6,7 +6,8 @@ def get_db_handler(dbtype):
         from db_mysql import MySQLHandler
         return MySQLHandler()
     elif dbtype == 'mongodb':
-        from db_mongodb import MongoDBHandler
-        return MongoDBHandler()
+        from db_mongo import MongoHandler
+        return MongoHandler()
     else:
-        raise ValueError("Unsupported DB type")
+        raise ValueError(f"Unsupported database type: {dbtype}")
+
