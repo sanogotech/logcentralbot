@@ -1,1 +1,6 @@
-
+2025-06-11 08:15:00  INFO Connexion utilisateur X
+2025-06-11 08:17:45  ERROR Paiement échoué
+2025-06-11 08:20:00  INFO Paiement validé pour l’utilisateur
+2025-06-11 08:55:00  INFO Connexion utilisateur XSDDD
+2025-06-11 08:19:45  ERROR Paiement échouésdcdzdezd
+2025-06-11 08:56:00  INFO Connexion utilisateur XSDDDSFDDSVFUUGG
