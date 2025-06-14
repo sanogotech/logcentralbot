@@ -16,6 +16,16 @@ Créer une solution de centralisation de logs **modulaire** et **multi-base** :
 
 ---
 
+## **Résumé des Bonnes Pratiques**
+| **Catégorie**       | **Action Clé**                                  | **Impact**                          |
+|---------------------|-----------------------------------------------|------------------------------------|
+| **Structured Logs** | Utiliser JSON pour les messages complexes.     | Meilleure analyse via SQL.         |
+| **Tagging**         | Appliquer des tags cohérents (ex: `api_health`). | Filtrage efficace.                 |
+| **Volume Control**  | Limiter les logs DEBUG en production.          | Réduction des coûts de stockage.   |
+| **Batching**        | Envoyer les logs par groupes de 100.           | Optimisation réseau/performance.   |
+
+Ces requêtes et bonnes pratiques permettent de transformer un système de logs en **outil puissant pour la technique, le métier et la sécurité**.
+
 ## 🗂️ Exemple de ligne de log attendue
 
 Format strict :
