@@ -6,6 +6,8 @@ from datetime import datetime
 
 # python log_sender.py  --application CRM_App --tag FRONT_WEB  --logfile /var/log/crm.log --server http://localhost:5000 --user johndoe --module LoginService --host 192.168.1.20 --interval 60
 
+# python client/log_sender.py  --application CRM_App --tag FRONT_WEB  --logfile logs-2025-06-11.txt --server http://localhost:5000 --user johndoe --module LoginService --host 192.168.1.20 --interval 60
+
 # Expression régulière robuste pour capturer les lignes de log valides
 LOG_PATTERN = re.compile(
     r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+(INFO|ERROR|WARNING)\s+(.+)$'
