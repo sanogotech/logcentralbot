@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}BAM - LogsApp{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.css">
+<style>
+    .bam-widget {
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        margin-bottom: 20px;
+    }
+    .bam-widget:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+    }
+    .bam-widget-header {
+        border-radius: 8px 8px 0 0;
+        padding: 15px;
+        color: white;
+    }
+    .bam-critical { background-color: #e74c3c; }
+    .bam-warning { background-color: #f39c12; }
+    .bam-normal { background-color: #2ecc71; }
+    .bam-error { background-color: #95a5a6; }
+    .bam-widget-body {
+        padding: 20px;
+        background: white;
+        border-radius: 0 0 8px 8px;
+    }
+    .bam-metric {
+        font-size: 2.5rem;
+        font-weight: 300;
+    }
+    .chart-container {
+        height: 300px;
+        margin-bottom: 20px;
+    }
+    .app-selector {
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if error_message %}
+    <div class="alert alert-danger">
+        {{ error_message }}
+    </div>
+    {% endif %}
+
+    <!-- Sélecteur d'application -->
+    <div class="row app-selector">
+        <div class="col-md-3">
+            <select class="form-select" id="appSelector">
+                <option value="">Toutes les applications</option>
+                {% for app in applications %}
+                    <option value="{{ app }}" {% if current_application == app %}selected{% endif %}>{{ app }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Widgets de métriques -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="bam-widget">
+                <div class="bam-widget-header bam-{{ metrics.availability.status|default('error') }}">
+                    <h5><i class="fas fa-check-circle me-2"></i>Disponibilité</h5>
+                </div>
+                <div class="bam-widget-body text-center">
+                    <div class="bam-metric">{{ metrics.availability.value|default(0) }}%</div>
+                    <div class="text-muted">vs {{ metrics.availability.target }}% cible</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="bam-widget">
+                <div class="bam-widget-header bam-{{ metrics.performance.status|default('error') }}">
+                    <h5><i class="fas fa-tachometer-alt me-2"></i>Performance</h5>
+                </div>
+                <div class="bam-widget-body text-center">
+                    <div class="bam-metric">{{ metrics.performance.value|default(0) }}ms</div>
+                    <div class="text-muted">vs {{ metrics.performance.target }}ms cible</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="bam-widget">
+                <div class="bam-widget-header bam-{{ metrics.error_rate.status|default('error') }}">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Taux d'Erreur</h5>
+                </div>
+                <div class="bam-widget-body text-center">
+                    <div class="bam-metric">{{ metrics.error_rate.value|default(0) }}%</div>
+                    <div class="text-muted">vs {{ metrics.error_rate.target }}% cible</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-chart-line me-2"></i>Tendance des Performances
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="performanceTrendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-chart-area me-2"></i>Disponibilité par Application
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="availabilityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des transactions -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <i class="fas fa-table me-2"></i>Transactions Clés
+        </div>
+        <div class="card-body">
+            {% if transactions %}
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Transaction</th>
+                        <th>Temps Moyen</th>
+                        <th>Taux de Réussite</th>
+                        <th>Volume</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in transactions %}
+                    <tr>
+                        <td>{{ tx.name }}</td>
+                        <td>{{ tx.avg_response_time|round(2) }}ms</td>
+                        <td>{{ tx.success_rate|round(2) }}%</td>
+                        <td>{{ tx.volume }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="alert alert-info">Aucune donnée de transaction disponible</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Gestion du sélecteur d'application
+    $('#appSelector').change(function() {
+        const app = $(this).val();
+        const url = new URL(window.location.href);
+        if (app) {
+            url.searchParams.set('application', app);
+        } else {
+            url.searchParams.delete('application');
+        }
+        window.location.href = url.toString();
+    });
+
+    // Graphique de tendance des performances
+    new Chart(
+        document.getElementById('performanceTrendChart'),
+        {
+            type: 'line',
+            data: {
+                labels: {{ performance_trend.labels|tojson|safe }},
+                datasets: [{
+                    label: 'Temps de Réponse (ms)',
+                    data: {{ performance_trend.data|tojson|safe }},
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        }
+    );
+
+    // Graphique de disponibilité par application
+    new Chart(
+        document.getElementById('availabilityChart'),
+        {
+            type: 'bar',
+            data: {
+                labels: {{ availability_by_app.labels|tojson|safe }},
+                datasets: [{
+                    label: 'Disponibilité (%)',
+                    data: {{ availability_by_app.data|tojson|safe }},
+                    backgroundColor: '#2ecc71'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        }
+    );
+});
+</script>
+{% endblock %}

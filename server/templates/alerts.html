@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}Alertes - LogsApp{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<style>
+    .alert-critical { background-color: #ff4444; color: white; }
+    .alert-warning { background-color: #ffbb33; }
+    .alert-info { background-color: #33b5e5; }
+    .alert-card { transition: all 0.3s ease; }
+    .alert-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+    .application-select {
+        width: 100%;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #ced4da;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-danger text-white">
+                <i class="fas fa-exclamation-triangle me-2"></i>Alertes Actives
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="activeAlertsTable" class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Application</th>
+                                <th>Message</th>
+                                <th>Depuis</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in active_alerts %}
+                            <tr class="alert-{{ alert.level|lower }}">
+                                <td>{{ alert.level|upper }}</td>
+                                <td>{{ alert.application }}</td>
+                                <td>{{ alert.message }}</td>
+                                <td>{{ alert.created_at }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-success resolve-btn" data-alert-id="{{ alert.id }}">
+                                        <i class="fas fa-check"></i> Résoudre
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-cog me-2"></i>Configuration des Alertes
+            </div>
+            <div class="card-body">
+                <form id="alertConfigForm">
+                    <div class="mb-3">
+                        <label class="form-label">Seuil d'erreur (erreurs/heure)</label>
+                        <input type="number" class="form-control" name="error_threshold" 
+                               value="{{ alert_config.error_threshold }}" min="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Seuil d'avertissement</label>
+                        <input type="number" class="form-control" name="warning_threshold" 
+                               value="{{ alert_config.warning_threshold }}" min="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Application surveillée</label>
+                        <select class="form-select application-select" name="monitored_application">
+                            <option value="">Toutes les applications</option>
+                            {% for app in applications %}
+                            <option value="{{ app }}" {% if alert_config.monitored_application == app %}selected{% endif %}>
+                                {{ app }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email de notification</label>
+                        <input type="email" class="form-control" name="notification_email" 
+                               value="{{ alert_config.notification_email }}">
+                    </div>
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-info" id="testEmailBtn">
+                            <i class="fas fa-paper-plane"></i> Tester l'envoi d'email
+                        </button>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Enregistrer
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-secondary text-white">
+        <i class="fas fa-history me-2"></i>Historique des Alertes
+    </div>
+    <div class="card-body">
+        <table id="alertsHistoryTable" class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Application</th>
+                    <th>Message</th>
+                    <th>Email envoyé</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alert_history %}
+                <tr>
+                    <td>{{ alert.created_at }}</td>
+                    <td>{{ alert.level|upper }}</td>
+                    <td>{{ alert.application }}</td>
+                    <td>{{ alert.message }}</td>
+                    <td>
+                        {% if alert.email_sent %}
+                            <span class="badge bg-success">Oui</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Non</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Initialisation des DataTables
+    const activeAlertsTable = $('#activeAlertsTable').DataTable({
+        order: [[3, 'desc']], // Tri par date de création descendante
+        language: {
+            url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json'
+        }
+    });
+
+    const historyTable = $('#alertsHistoryTable').DataTable({
+        order: [[0, 'desc']],
+        language: {
+            url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json'
+        }
+    });
+
+    // Gestion de la résolution des alertes
+    $(document).on('click', '.resolve-btn', function() {
+        const alertId = $(this).data('alert-id');
+        if (confirm("Confirmez-vous la résolution de cette alerte ?")) {
+            $.post(`/api/alerts/${alertId}/resolve`, function() {
+                refreshActiveAlerts();
+            });
+        }
+    });
+
+    // Test d'envoi d'email
+    $('#testEmailBtn').click(function() {
+        const email = $('[name="notification_email"]').val();
+        const application = $('[name="monitored_application"]').val();
+        
+        if (!email) {
+            alert("Veuillez d'abord configurer une adresse email");
+            return;
+        }
+
+        $.ajax({
+            url: '/api/alerts/test-email',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                email: email,
+                application: application
+            }),
+            success: function(response) {
+                alert("Email test envoyé ! Vérifiez le fichier sendEmail.log");
+            },
+            error: function(xhr) {
+                alert("Erreur: " + xhr.responseJSON?.error || "Échec de l'envoi");
+            }
+        });
+    });
+
+    // Configuration des alertes
+    $('#alertConfigForm').submit(function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            error_threshold: $('[name="error_threshold"]').val(),
+            warning_threshold: $('[name="warning_threshold"]').val(),
+            notification_email: $('[name="notification_email"]').val(),
+            monitored_application: $('[name="monitored_application"]').val()
+        };
+        
+        $.ajax({
+            url: '/api/alerts/config',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function() {
+                alert("Configuration sauvegardée !");
+                refreshActiveAlerts();
+            },
+            error: function(xhr) {
+                alert("Erreur: " + (xhr.responseJSON?.error || "Échec de la sauvegarde"));
+            }
+        });
+    });
+
+    // Fonction pour rafraîchir les alertes actives
+// Fonction pour rafraîchir les alertes actives
+function refreshActiveAlerts() {
+    $.ajax({
+        url: 'http://localhost:5000/api/alerts/active',
+        type: 'GET',
+        timeout: 5000, // 5 secondes timeout
+        success: function(data) {
+            // ... traitement existant
+        },
+        error: function(xhr, status, error) {
+            if (status === "timeout") {
+                console.error("Timeout - Le serveur ne répond pas");
+            } else if (xhr.status === 0) {
+                console.error("Connexion refusée - Vérifiez que le serveur est démarré");
+                // Affichez un message à l'utilisateur
+                $('#server-error').html(`
+                    <div class="alert alert-danger">
+                        Serveur indisponible. Vérifiez que le backend est en cours d'exécution sur http://localhost:5000
+                    </div>
+                `);
+            } else {
+                console.error("Erreur API:", status, error);
+            }
+        }
+    });
+}
+
+// Fonction utilitaire pour tronquer les longs messages
+function truncateString(str, maxLength) {
+    if (typeof str !== 'string') return str;
+    return str.length > maxLength ? str.substring(0, maxLength) + '...' : str;
+}
+
+// Fonction pour afficher des messages d'alerte à l'utilisateur
+function showAlertMessage(type, message) {
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    // Ajouter en haut du conteneur des alertes
+    $('#activeAlertsTable').closest('.card').before(alertHtml);
+    
+    // Supprimer automatiquement après 5 secondes
+    setTimeout(() => {
+        $('.alert').alert('close');
+    }, 5000);
+}
+
+// Fonction pour mettre à jour le compteur d'alertes dans l'UI
+function updateAlertsCounter(count) {
+    const counterElement = $('#activeAlertsCounter');
+    if (counterElement.length) {
+        counterElement.text(count);
+    } else {
+        // Créer le compteur s'il n'existe pas
+        $('.card-header').first().append(
+            `<span id="activeAlertsCounter" class="badge bg-light text-dark ms-2">${count}</span>`
+        );
+    }
+}
+
+    // Appel initial et rafraîchissement périodique
+    refreshActiveAlerts();
+    setInterval(refreshActiveAlerts, 30000); // Rafraîchit toutes les 30 secondes
+});
+
+
+$('#alertConfigForm').submit(function(e) {
+    e.preventDefault();
+    
+    const formData = {
+        error_threshold: parseInt($('[name="error_threshold"]').val()),
+        warning_threshold: parseInt($('[name="warning_threshold"]').val()),
+        notification_email: $('[name="notification_email"]').val(),
+        monitored_application: $('[name="monitored_application"]').val()
+    };
+    
+    console.log("Envoi configuration:", formData);
+    
+    $.ajax({
+        url: '/api/alerts/config',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        success: function(response) {
+            alert("Configuration sauvegardée ! Recalcul des alertes...");
+            // Recharge après 2 secondes pour laisser le temps au recalcul
+            //setTimeout(refreshActiveAlerts, 2000); 
+        },
+        error: function(xhr) {
+            const errorMsg = xhr.responseJSON?.error || "Échec de la sauvegarde";
+            //console.error("Erreur:", xhr.status, errorMsg);
+            alert("Erreur: " + errorMsg);
+        }
+    });
+});
+</script>
+{% endblock %}

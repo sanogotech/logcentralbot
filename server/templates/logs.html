@@ -22,7 +22,7 @@
     
     /* Badges et éléments secondaires */
     .badge.bg-info {
-        background-color: #d1ecf1;
+        background-color: #d1ecf1 !important;
     }
     
     /* En-tête des cartes */
@@ -41,31 +41,55 @@
         display: flex;
         align-items: center;
         font-weight: bold;
-        color: #2c3e50; /* Bleu foncé */
+        color: #2c3e50;
     }
     #logsTable_filter input {
         margin-left: 10px;
         width: 200px !important;
         padding: 5px 10px;
         border-radius: 4px;
-        border: 2px solid #9b59b6; /* Violet */
+        border: 2px solid #9b59b6;
     }
     #logsTable_length label {
         display: flex;
         align-items: center;
-        color: #2c3e50; /* Bleu foncé */
+        color: #2c3e50;
     }
     #logsTable_length select {
         width: 80px;
         margin: 0 5px;
-        border: 2px solid #e67e22; /* Orange */
+        border: 2px solid #e67e22;
     }
     
-    /* Conserver les styles existants pour le tableau */
+    /* Styles pour les lignes du tableau */
     .log-error { background-color: #f8d7da; }
     .log-warning { background-color: #fff3cd; }
     .log-info { background-color: #d1ecf1; }
     #filterSummary .badge { margin-right: 5px; }
+    
+    /* Style pour la colonne Response Time */
+    .response-time-fast {
+        color: #28a745; /* Vert pour les temps rapides */
+        font-weight: bold;
+    }
+    .response-time-medium {
+        color: #ffc107; /* Jaune pour les temps moyens */
+        font-weight: bold;
+    }
+    .response-time-slow {
+        color: #dc3545; /* Rouge pour les temps lents */
+        font-weight: bold;
+    }
+    
+    /* Ajustement de la largeur des colonnes */
+    th:nth-child(1) { width: 12%; } /* Date */
+    th:nth-child(2) { width: 10%; } /* Application */
+    th:nth-child(3) { width: 8%; }  /* Tag */
+    th:nth-child(4) { width: 8%; }  /* Niveau */
+    th:nth-child(5) { width: 10%; } /* Module */
+    th:nth-child(6) { width: 10%; } /* Host */
+    th:nth-child(7) { width: 10%; } /* Response Time */
+    th:nth-child(8) { width: 32%; } /* Message */
 </style>
 {% endblock %}
 
@@ -77,7 +101,7 @@
     </div>
     <div class="card-body">
         <form id="filterForm" class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="appFilter" class="form-label">Application</label>
                 <input type="text" class="form-control" id="appFilter" name="application" 
                        value="{{ application or '' }}" placeholder="Toutes">
@@ -91,7 +115,7 @@
                     <option value="ERROR" {% if level == 'ERROR' %}selected{% endif %}>ERROR</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="moduleFilter" class="form-label">Module</label>
                 <input type="text" class="form-control" id="moduleFilter" name="module" 
                        value="{{ module or '' }}" placeholder="Tous">
@@ -100,6 +124,15 @@
                 <label for="hostFilter" class="form-label">Host</label>
                 <input type="text" class="form-control" id="hostFilter" name="host" 
                        value="{{ host or '' }}" placeholder="Tous">
+            </div>
+            <div class="col-md-2">
+                <label for="responseTimeFilter" class="form-label">Temps réponse</label>
+                <select class="form-select" id="responseTimeFilter" name="response_time">
+                    <option value="">Tous</option>
+                    <option value="fast" {% if response_time == 'fast' %}selected{% endif %}>Rapide (<100ms)</option>
+                    <option value="medium" {% if response_time == 'medium' %}selected{% endif %}>Moyen (100-500ms)</option>
+                    <option value="slow" {% if response_time == 'slow' %}selected{% endif %}>Lent (≥500ms)</option>
+                </select>
             </div>
             <div class="col-md-2 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary w-100">
@@ -110,7 +143,7 @@
     </div>
 </div>
 
-<!-- Tableau des logs (inchangé) -->
+<!-- Tableau des logs -->
 <div class="card shadow-sm">
     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
         <span><i class="fas fa-list me-2"></i>Logs</span>
@@ -119,6 +152,7 @@
             {% if level %}<span class="badge bg-info">Niveau: {{ level }}</span>{% endif %}
             {% if module %}<span class="badge bg-info">Module: {{ module }}</span>{% endif %}
             {% if host %}<span class="badge bg-info">Host: {{ host }}</span>{% endif %}
+            {% if response_time %}<span class="badge bg-info">Temps: {{ response_time }}</span>{% endif %}
         </div>
     </div>
     <div class="card-body p-0">
@@ -132,6 +166,7 @@
                         <th><i class="fas fa-bolt me-1"></i>Niveau</th>
                         <th><i class="fas fa-cube me-1"></i>Module</th>
                         <th><i class="fas fa-desktop me-1"></i>Host</th>
+                        <th><i class="fas fa-stopwatch me-1"></i>Response Time</th>
                         <th><i class="fas fa-comment me-1"></i>Message</th>
                     </tr>
                 </thead>
@@ -152,11 +187,16 @@
                         </td>
                         <td>{{ log.module }}</td>
                         <td>{{ log.host }}</td>
-                        <td>{{ log.message }}</td>
+                        <td class="{% if log.response_time < 100 %}response-time-fast
+                                  {% elif log.response_time < 500 %}response-time-medium
+                                  {% else %}response-time-slow{% endif %}">
+                            {{ log.response_time }} ms
+                        </td>
+                        <td class="text-truncate" style="max-width: 300px;" title="{{ log.message }}">{{ log.message }}</td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="text-center py-4 text-muted">Aucun log disponible</td>
+                        <td colspan="8" class="text-center py-4 text-muted">Aucun log disponible</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -177,69 +217,22 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 <script>
 $(document).ready(function() {
-    // First ensure the table exists and has proper structure
-    const $table = $('#logsTable');
-    
-    // Verify table structure before initialization
-    if ($table.length && $table.find('thead th').length === $table.find('tbody tr:first td').length) {
-        // Initialize DataTable with proper error handling
-        try {
-            const table = $table.DataTable({
-                order: [[0, 'desc']],
-                pageLength: 25,
-                lengthMenu: [[10, 20, 50, 100, -1], [10, 20, 50, 100, "Tous"]],
-                language: {
-                    url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json',
-                    lengthMenu: "Afficher _MENU_ éléments",
-                    search: "Rechercher:",
-                    searchPlaceholder: "Texte à rechercher..."
-                },
-                dom: '<"top"<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>>rt<"bottom"<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>>',
-                initComplete: function() {
-                    console.log('DataTable initialized successfully');
-                },
-                error: function() {
-                    console.error('DataTables initialization error');
-                }
-            });
-
-            // Auto-refresh with DataTable awareness
-            setInterval(() => {
-                fetch(window.location.pathname + '?' + new URLSearchParams(window.location.search))
-                    .then(response => response.text())
-                    .then(html => {
-                        const doc = new DOMParser().parseFromString(html, 'text/html');
-                        const $newTable = $(doc).find('#logsTable');
-                        
-                        if ($newTable.length) {
-                            // Destroy existing DataTable before replacing content
-                            if ($.fn.DataTable.isDataTable($table)) {
-                                table.destroy();
-                            }
-                            
-                            // Replace content
-                            $table.find('tbody').html($newTable.find('tbody').html());
-                            
-                            // Reinitialize DataTable
-                            $table.DataTable({
-                                // Same options as before
-                                order: [[0, 'desc']],
-                                pageLength: table.page.len(),
-                                stateSave: true
-                            });
-                            
-                            $('#lastUpdate').text(new Date().toLocaleString('fr-FR'));
-                        }
-                    })
-                    .catch(error => console.error('Refresh error:', error));
-            }, 30000);
-
-        } catch (e) {
-            console.error('DataTables initialization failed:', e);
-        }
-    } else {
-        console.error('Table structure is invalid - header/body column mismatch');
-    }
+    // Initialisation DataTable avec options de longueur
+    const table = $('#logsTable').DataTable({
+        order: [[0, 'desc']],
+        pageLength: 25,
+        lengthMenu: [[10, 20, 50, 100, -1], [10, 20, 50, 100, "Tous"]],
+        language: {
+            url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json',
+            lengthMenu: "Afficher _MENU_ éléments",
+            search: "Rechercher:",
+            searchPlaceholder: "Texte à rechercher..."
+        },
+        dom: '<"top"<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>>rt<"bottom"<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>>',
+        columnDefs: [
+            { targets: [7], orderable: false } // Désactiver le tri sur la colonne Message
+        ]
+    });
 
     // Gestion du formulaire
     $('#filterForm').on('submit', function(e) {
@@ -252,6 +245,19 @@ $(document).ready(function() {
 
         window.location.href = '/logs?' + params.toString();
     });
+
+    // Auto-refresh toutes les 30 secondes
+    setInterval(() => {
+        fetch(window.location.pathname + '?' + new URLSearchParams(window.location.search))
+            .then(response => response.text())
+            .then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const newContent = doc.querySelector('tbody').innerHTML;
+                document.querySelector('tbody').innerHTML = newContent;
+                $('#lastUpdate').text(new Date().toLocaleString('fr-FR'));
+                table.draw(); // Rafraîchir la DataTable après mise à jour
+            });
+    }, 30000);
 });
 </script>
 {% endblock %}

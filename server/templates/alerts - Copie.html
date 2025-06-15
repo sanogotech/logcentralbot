@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Alertes - LogsApp{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<style>
+    .alert-critical { background-color: #ff4444; color: white; }
+    .alert-warning { background-color: #ffbb33; }
+    .alert-info { background-color: #33b5e5; }
+    .alert-card { transition: all 0.3s ease; }
+    .alert-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-danger text-white">
+                <i class="fas fa-exclamation-triangle me-2"></i>Alertes Actives
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="activeAlertsTable" class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Application</th>
+                                <th>Message</th>
+                                <th>Depuis</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in active_alerts %}
+                            <tr class="alert-{{ alert.level }}">
+                                <td>{{ alert.level|upper }}</td>
+                                <td>{{ alert.application }}</td>
+                                <td>{{ alert.message }}</td>
+                                <td>{{ alert.since }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-cog me-2"></i>Configuration des Alertes
+            </div>
+            <div class="card-body">
+                <form id="alertConfigForm">
+                    <div class="mb-3">
+                        <label class="form-label">Seuil d'erreur</label>
+                        <input type="number" class="form-control" name="error_threshold" value="{{ alert_config.error_threshold }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notifications Email</label>
+                        <input type="email" class="form-control" name="notification_email" value="{{ alert_config.notification_email }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-secondary text-white">
+        <i class="fas fa-history me-2"></i>Historique des Alertes
+    </div>
+    <div class="card-body">
+        <table id="alertsHistoryTable" class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Application</th>
+                    <th>Message</th>
+                    <th>Statut</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alert_history %}
+                <tr>
+                    <td>{{ alert.timestamp }}</td>
+                    <td>{{ alert.level|upper }}</td>
+                    <td>{{ alert.application }}</td>
+                    <td>{{ alert.message }}</td>
+                    <td>{{ alert.status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#activeAlertsTable, #alertsHistoryTable').DataTable({
+        order: [[0, 'desc']],
+        language: {
+            url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json'
+        }
+    });
+    
+    // Configuration auto-refresh
+    setInterval(() => {
+        fetch('/api/alerts')
+            .then(response => response.json())
+            .then(data => {
+                // Mise à jour des alertes actives
+                updateAlertTable('#activeAlertsTable', data.active_alerts);
+            });
+    }, 30000);
+    
+    function updateAlertTable(tableId, alerts) {
+        const table = $(tableId).DataTable();
+        table.clear();
+        alerts.forEach(alert => {
+            table.row.add([
+                alert.level.toUpperCase(),
+                alert.application,
+                alert.message,
+                alert.since
+            ]);
+        });
+        table.draw();
+    }
+});
+</script>
+{% endblock %}

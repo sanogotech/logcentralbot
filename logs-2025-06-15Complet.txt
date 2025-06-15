@@ -1,0 +1,4 @@
+2023-11-15 14:30:45 INFO User authenticated successfully [RT:125ms]
+2023-11-15 14:30:46 ERROR Database connection failed [RT:650ms]
+2023-11-15 14:30:45 INFO V2 User authenticated successfully [RT:125ms]
+2023-11-15 14:30:46 ERROR V2 Database connection failed [RT:650ms]

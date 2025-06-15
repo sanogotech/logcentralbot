@@ -1,14 +1,24 @@
 import argparse
-from datetime import datetime  # Import manquant
+from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 from db_factory import get_db_handler
 
 app = Flask(__name__)
 db = None
 
+@app.context_processor
+def inject_global_vars():
+    return {
+        'now': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'app_name': 'LogsApp'
+    }
+
 @app.route('/')
-def index():
-    # Récupère tous les paramètres de filtrage
+def home():
+    return render_template('index.html')
+
+@app.route('/logs')
+def view_logs():
     filters = {
         'tag': request.args.get('tag', ''),
         'level': request.args.get('level', ''),
@@ -17,69 +27,122 @@ def index():
         'host': request.args.get('host', '')
     }
     
-    # Récupère les logs filtrés
-    logs = db.get_logs(**filters)
+    logs = db.get_logs(
+        tag=filters['tag'],
+        level=filters['level'],
+        application=filters['application'],
+        module=filters['module'],
+        host=filters['host']
+    )
+    
+    stats = {
+        'total': len(logs),
+        'info': sum(1 for log in logs if log['level'] == 'INFO'),
+        'warnings': sum(1 for log in logs if log['level'] == 'WARNING'),
+        'errors': sum(1 for log in logs if log['level'] == 'ERROR')
+    }
+    
+    return render_template('logs.html', logs=logs, stats=stats, **filters)
+
+@app.route('/alerts')
+def view_alerts():
+    active_alerts = db.get_active_alerts()
+    alert_history = db.get_alert_history(limit=50)
+    alert_config = db.get_alert_config()
     
     return render_template(
-        'index.html',
-        logs=logs,
-        **filters,
-        now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        'alerts.html',
+        active_alerts=active_alerts,
+        alert_history=alert_history,
+        alert_config=alert_config
     )
 
+
+@app.route('/stats')
+def view_stats():
+    time_range = request.args.get('time_range', '24h')
+    application = request.args.get('application', '')
+    
+    # Récupération des données
+    stats = db.get_stats_summary(time_range, application)
+    level_data = db.get_logs_by_level(time_range, application)
+    top_apps = db.get_top_applications(5, time_range, application)
+    
+    # Préparation des données pour les graphiques
+    level_labels = [row['level'] for row in level_data]
+    level_counts = [row['count'] for row in level_data]
+    
+    app_labels = [app['application'] for app in top_apps]
+    app_counts = [app['count'] for app in top_apps]
+    
+    return render_template(
+        'stats.html',
+        stats=stats,
+        level_labels=level_labels,
+        level_counts=level_counts,
+        app_labels=app_labels,
+        app_counts=app_counts,
+        applications=db.get_distinct_values('application'),
+        current_time_range=time_range,
+        current_application=application
+    )
+
+@app.route('/bam')
+def view_bam():
+    bam_data = db.get_bam_metrics()
+    return render_template('bam.html', **bam_data)
+
 @app.route('/receive_logs', methods=['POST'])
+@app.route('/api/logs', methods=['POST'])
 def receive_logs():
     data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No JSON received'}), 400
-
-    logs = data.get('logs', [])
-    if not logs:
-        return jsonify({'error': 'No logs provided'}), 400
-
-    count = 0
-    for log in logs:
+    
+    if not data or not isinstance(data.get('logs'), list):
+        return jsonify({'error': 'Invalid data format'}), 400
+    
+    inserted_count = 0
+    errors = []
+    
+    for log in data['logs']:
         try:
             db.insert_log(
                 application=log.get('application', 'Unknown'),
-                tag=log.get('tag', 'Unknown'),
-                timestamp=log.get('timestamp', ''),
-                level=log.get('level', 'INFO'),
+                tag=log.get('tag', 'general'),
+                timestamp=log.get('timestamp', datetime.now().isoformat()),
+                level=log.get('level', 'INFO').upper(),
                 message=log.get('message', ''),
                 user=log.get('user', 'system'),
                 module=log.get('module', 'main'),
-                host=log.get('host', 'localhost')
+                host=log.get('host', 'localhost'),
+                response_time=log.get('response_time', 0)
             )
-            count += 1
+            inserted_count += 1
         except Exception as e:
-            print(f"❌ Failed to insert log: {e}")
-    return jsonify({'message': f'{count} logs inserted'}), 200
-
-
-@app.route('/bam_metrics')
-def bam_metrics():
-    # Endpoint pour les données BAM (à implémenter)
+            errors.append(str(e))
+    
     return jsonify({
-        "kpis": [
-            {"name": "Taux de transactions", "value": "98.5%", "target": ">95%"},
-            {"name": "Erreurs de paiement", "value": "12/h", "target": "<20/h"}
-        ],
-        "alerts": [
-            {"message": "⚠️ Taux de conversion en baisse de 15%", "timestamp": "2023-11-15 14:30"}
-        ]
-    })
+        'message': f'Inserted {inserted_count}/{len(data["logs"])} logs',
+        'inserted': inserted_count,
+        'errors': errors
+    }), 200 if inserted_count > 0 else 400
+
+def initialize_db(db_type='sqlite'):
+    global db
+    db = get_db_handler(db_type)
+    db.init_db()
+    print(f"Database initialized ({db_type})")
 
 def main():
-    global db
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='LogsApp Server')
     parser.add_argument('--dbtype', choices=['sqlite', 'mysql', 'mongodb'], 
-                      default='sqlite', help='Type de base de données')
+                      default='sqlite', help='Database type')
+    parser.add_argument('--host', default='0.0.0.0', help='Server host')
+    parser.add_argument('--port', type=int, default=5000, help='Server port')
+    parser.add_argument('--debug', action='store_true', help='Debug mode')
+    
     args = parser.parse_args()
-
-    db = get_db_handler(args.dbtype)
-    db.init_db()
-
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    initialize_db(args.dbtype)
+    app.run(host=args.host, port=args.port, debug=args.debug)
 
 if __name__ == '__main__':
     main()

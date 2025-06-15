@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Statistiques - LogsApp{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.css">
+<style>
+    .stat-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid #2c3e50;
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .stat-card .card-body {
+        padding: 1.5rem;
+    }
+    .stat-card h2 {
+        font-size: 2.5rem;
+        font-weight: 300;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Cartes de statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <h2>{{ stats.total }}</h2>
+                    <p class="text-muted">Logs Totaux</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <h2>{{ stats.errors }}</h2>
+                    <p class="text-muted">Erreurs</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <h2>{{ stats.warnings }}</h2>
+                    <p class="text-muted">Avertissements</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <h2>{{ stats.applications }}</h2>
+                    <p class="text-muted">Applications</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+            <i class="fas fa-filter me-2"></i>Filtres Statistiques
+        </div>
+        <div class="card-body">
+            <form id="statsFilterForm" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Période</label>
+                    <select class="form-select" name="time_range">
+                        <option value="24h" {% if current_time_range == '24h' %}selected{% endif %}>24 dernières heures</option>
+                        <option value="7d" {% if current_time_range == '7d' %}selected{% endif %}>7 derniers jours</option>
+                        <option value="30d" {% if current_time_range == '30d' %}selected{% endif %}>30 derniers jours</option>
+                        <option value="all" {% if current_time_range == 'all' %}selected{% endif %}>Toutes les données</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Application</label>
+                    <select class="form-select" name="application">
+                        <option value="">Toutes</option>
+                        {% for app in applications %}
+                        <option value="{{ app }}" {% if current_application == app %}selected{% endif %}>{{ app }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-1"></i>Filtrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-chart-pie me-2"></i>Répartition par Niveau
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="levelChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-chart-bar me-2"></i>Top Applications
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="appChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Données pour les graphiques
+    const levelData = {
+        labels: JSON.parse('{{ level_labels|tojson|safe }}'),
+        datasets: [{
+            data: JSON.parse('{{ level_counts|tojson|safe }}'),
+            backgroundColor: [
+                '#e74c3c', // ERROR
+                '#f39c12', // WARNING
+                '#2ecc71', // INFO
+                '#3498db'  // OTHER
+            ],
+            borderWidth: 1
+        }]
+    };
+
+    const appData = {
+        labels: JSON.parse('{{ app_labels|tojson|safe }}'),
+        datasets: [{
+            label: 'Nombre de Logs',
+            data: JSON.parse('{{ app_counts|tojson|safe }}'),
+            backgroundColor: '#2c3e50',
+            borderWidth: 1
+        }]
+    };
+
+    // Configuration des graphiques
+    new Chart(
+        document.getElementById('levelChart'),
+        {
+            type: 'doughnut',
+            data: levelData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        }
+    );
+
+    new Chart(
+        document.getElementById('appChart'),
+        {
+            type: 'bar',
+            data: appData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        }
+    );
+
+    // Gestion du formulaire de filtrage
+    $('#statsFilterForm').on('submit', function(e) {
+        e.preventDefault();
+        const params = $(this).serialize();
+        window.location.href = '/stats?' + params;
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Accueil - LogsApp{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body text-center">
+        <h1 class="card-title">
+            <i class="fas fa-chart-line text-primary me-2"></i>Bienvenue sur LogsApp
+        </h1>
+        <p class="card-text lead mt-3">
+            Solution complète de centralisation et d'analyse des logs en temps réel.
+        </p>
+        <div class="row mt-4">
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3><i class="fas fa-tachometer-alt text-info me-2"></i>Dashboard</h3>
+                        <p>Visualisation intuitive des données de logs</p>
+                        <a href="/logs" class="btn btn-outline-primary">
+                            <i class="fas fa-arrow-right me-1"></i>Accéder
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3><i class="fas fa-bell text-warning me-2"></i>Alertes</h3>
+                        <p>Gestion des notifications et seuils critiques</p>
+                        <a href="/logs?level=ERROR" class="btn btn-outline-warning">
+                            <i class="fas fa-arrow-right me-1"></i>Voir les erreurs
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
