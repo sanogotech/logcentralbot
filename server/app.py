@@ -5,8 +5,11 @@ from db_factory import get_db_handler
 
 from flask import jsonify
 import logging
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)  # Active CORS pour toutes les routes
+
 db = None
 
 @app.context_processor
