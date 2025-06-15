@@ -68,26 +68,96 @@ def view_alerts():
         applications=applications
     )
 
-
 @app.route('/api/alerts/config', methods=['POST'])
 def update_alert_config():
+    """
+    Endpoint pour mettre à jour la configuration des alertes
+    Exemple de requête JSON:
+    {
+        "error_threshold": 5,
+        "warning_threshold": 10,
+        "notification_email": "admin@example.com",
+        "monitored_application": "MyApp"
+    }
+    """
+    # Vérification du Content-Type
     if not request.is_json:
-        return jsonify({'error': 'Request must be JSON'}), 415
+        app.logger.warning("Tentative de requête sans Content-Type JSON")
+        return jsonify({
+            'status': 'error',
+            'message': 'Le Content-Type doit être application/json'
+        }), 415
     
+    # Validation des données requises
+    required_fields = ['error_threshold', 'warning_threshold']
     data = request.get_json()
+    
+    if not all(field in data for field in required_fields):
+        missing = [f for f in required_fields if f not in data]
+        app.logger.warning(f"Champs manquants dans la requête: {missing}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Champs obligatoires manquants: {", ".join(missing)}',
+            'required_fields': required_fields
+        }), 400
+
     try:
-        db.update_alert_config(
-            error_threshold=int(data.get('error_threshold')),
-            warning_threshold=int(data.get('warning_threshold')),
+        # Conversion et validation des seuils
+        error_threshold = int(data['error_threshold'])
+        warning_threshold = int(data['warning_threshold'])
+        
+        if error_threshold <= 0 or warning_threshold <= 0:
+            raise ValueError("Les seuils doivent être des entiers positifs")
+            
+        if warning_threshold <= error_threshold:
+            raise ValueError("Le seuil d'avertissement doit être supérieur au seuil d'erreur")
+
+        # Mise à jour de la configuration
+        success = db.update_alert_config(
+            error_threshold=error_threshold,
+            warning_threshold=warning_threshold,
             notification_email=data.get('notification_email'),
             monitored_application=data.get('monitored_application')
         )
         
-        # Nouveau : Recalculer les alertes après modification
+        if not success:
+            raise RuntimeError("Échec de la mise à jour de la configuration")
+
+        # Recalcul des alertes existantes
         db.recheck_all_alerts()
-        return jsonify({'status': 'success'})
+        
+        app.logger.info(
+            f"Configuration mise à jour - "
+            f"Erreur: {error_threshold}, "
+            f"Avert: {warning_threshold}, "
+            f"App: {data.get('monitored_application') or 'Toutes'}"
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Configuration sauvegardée avec succès',
+            'config': {
+                'error_threshold': error_threshold,
+                'warning_threshold': warning_threshold,
+                'monitored_application': data.get('monitored_application'),
+                'notification_email': data.get('notification_email')
+            }
+        })
+
+    except ValueError as ve:
+        app.logger.error(f"Erreur de validation: {str(ve)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(ve),
+            'type': 'validation_error'
+        }), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        app.logger.error(f"Erreur inattendue: {str(e)}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': 'Une erreur interne est survenue',
+            'type': 'server_error'
+        }), 500
 
 @app.route('/api/alerts/test-email', methods=['POST'])
 def test_email():

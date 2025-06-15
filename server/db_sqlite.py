@@ -24,6 +24,14 @@ class SQLiteHandler:
                     response_time INTEGER DEFAULT 0
                 );
                 
+                CREATE TABLE IF NOT EXISTS config_changes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    changed_at TEXT NOT NULL,
+                    changed_field TEXT NOT NULL,
+                    old_value TEXT,
+                    new_value TEXT
+                );
+                
                 CREATE TABLE IF NOT EXISTS alerts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     level TEXT NOT NULL,
@@ -165,12 +173,37 @@ class SQLiteHandler:
             ''', (level, application, module, host, message, False))
 
     def get_active_alerts(self):
-        return self.conn.execute('''
-            SELECT * FROM alerts 
-            WHERE status = 'active' 
-            ORDER BY created_at DESC
-        ''').fetchall()
+        """Version debuguée avec logging complet"""
+        try:
+            # Debug 1: Vérifiez la requête exacte
+            query = '''
+                SELECT * FROM alerts 
+                WHERE status = 'active'
+                ORDER BY created_at DESC
+            '''
+            print(f"\n[DEBUG] Exécution de la requête:\n{query}")  # Log la requête
+            
+            # Debug 2: Comptez les alertes avant filtrage
+            total = self.conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
+            active = self.conn.execute("SELECT COUNT(*) FROM alerts WHERE status = 'active'").fetchone()[0]
+            print(f"[DEBUG] Alertes totales/actives: {total}/{active}")
+            
+            # Exécution normale
+            alerts = self.conn.execute(query).fetchall()
+            
+            # Debug 3: Log les résultats
+            print(f"[DEBUG] Alertes retournées: {len(alerts)}")
+            for i, alert in enumerate(alerts[:3], 1):  # Affiche les 3 premières max
+                print(f"  Alerte {i}: {dict(alert)}")
+            
+            return alerts
+            
+        except Exception as e:
+            print(f"[ERREUR] Dans get_active_alerts: {str(e)}")
+            return []
 
+
+ 
     def get_alert_history(self, limit=50):
         return self.conn.execute('''
             SELECT * FROM alerts 
@@ -193,15 +226,110 @@ class SQLiteHandler:
         }
                 
     def update_alert_config(self, error_threshold, warning_threshold, notification_email, monitored_application=None):
-        with self.conn:
-            self.conn.execute('''
-                UPDATE alert_config SET
-                    error_threshold = ?,
-                    warning_threshold = ?,
-                    notification_email = ?,
-                    monitored_application = ?,
-                    last_updated = CURRENT_TIMESTAMP
-            ''', (error_threshold, warning_threshold, notification_email, monitored_application))
+        """
+        Met à jour la configuration des alertes avec validation, gestion d'erreurs,
+        et revalidation immédiate des alertes existantes.
+        
+        Args:
+            error_threshold (int): Seuil d'erreurs/heure pour les alertes CRITICAL
+            warning_threshold (int): Seuil d'erreurs/heure pour les alertes WARNING
+            notification_email (str): Email de notification
+            monitored_application (str, optional): Application spécifique à surveiller
+        
+        Returns:
+            bool: True si la mise à jour a réussi, False sinon
+        """
+        try:
+            # Validation des entrées
+            if not isinstance(error_threshold, int) or error_threshold < 1:
+                raise ValueError("Le seuil d'erreur doit être un entier positif")
+                
+            if not isinstance(warning_threshold, int) or warning_threshold < 1:
+                raise ValueError("Le seuil d'avertissement doit être un entier positif")
+                
+            if warning_threshold <= error_threshold:
+                raise ValueError("Le seuil d'avertissement doit être supérieur au seuil d'erreur")
+                
+            if notification_email and '@' not in notification_email:
+                raise ValueError("Format d'email invalide")
+
+            with self.conn:
+                # Vérifie si une configuration existe déjà
+                config_exists = self.conn.execute(
+                    "SELECT 1 FROM alert_config LIMIT 1"
+                ).fetchone()
+                
+                if config_exists:
+                    # Mise à jour existante
+                    self.conn.execute('''
+                        UPDATE alert_config SET
+                            error_threshold = ?,
+                            warning_threshold = ?,
+                            notification_email = ?,
+                            monitored_application = ?,
+                            last_updated = CURRENT_TIMESTAMP
+                    ''', (error_threshold, warning_threshold, notification_email, monitored_application))
+                else:
+                    # Insertion initiale
+                    self.conn.execute('''
+                        INSERT INTO alert_config (
+                            error_threshold,
+                            warning_threshold,
+                            notification_email,
+                            monitored_application
+                        ) VALUES (?, ?, ?, ?)
+                    ''', (error_threshold, warning_threshold, notification_email, monitored_application))
+                
+                # Log la modification
+                self.conn.execute('''
+                    INSERT INTO config_changes (
+                        changed_at,
+                        changed_field,
+                        old_value,
+                        new_value
+                    ) VALUES (CURRENT_TIMESTAMP, 'ALL', 'CONFIG_UPDATE', ?)
+                ''', (f"Seuils: {error_threshold}/{warning_threshold} | App: {monitored_application or 'Toutes'}",))
+
+                print(f"[CONFIG] Configuration mise à jour - Erreur: {error_threshold}, Avert: {warning_threshold}")
+
+            # ✅ Revalider les alertes existantes
+            print("[CONFIG] Revalidation des alertes après mise à jour des seuils...")
+            self.recheck_all_alerts()
+
+            # ✅ Optionnel : marquer les alertes obsolètes comme résolues si plus valides
+            config = self.get_alert_config()
+            apps = self.get_distinct_values('application')
+            for app in apps:
+                if config['monitored_application'] and config['monitored_application'] != app:
+                    continue
+                error_count = self.conn.execute('''
+                    SELECT COUNT(*) FROM logs 
+                    WHERE application = ? AND level = 'ERROR' 
+                    AND timestamp >= datetime('now', '-1 hour')
+                ''', (app,)).fetchone()[0]
+                
+                # Si les erreurs sont < warning_threshold ⇒ on résout les alertes actives
+                if error_count < config['warning_threshold']:
+                    print(f"[CONFIG] Résolution des alertes actives pour '{app}' (erreurs récentes: {error_count})")
+                    self.conn.execute('''
+                        UPDATE alerts SET 
+                            status = 'resolved',
+                            resolved_at = CURRENT_TIMESTAMP
+                        WHERE status = 'active' AND application = ?
+                    ''', (app,))
+
+            return True
+            
+        except ValueError as ve:
+            print(f"[ERREUR] Validation config: {str(ve)}")
+            return False
+        except sqlite3.Error as e:
+            print(f"[ERREUR] SQLite lors de la mise à jour: {str(e)}")
+            return False
+        except Exception as e:
+            print(f"[ERREUR] Inattendue dans update_alert_config: {str(e)}")
+            return False
+
 
     def resolve_alert(self, alert_id):
         with self.conn:
