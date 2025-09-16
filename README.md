@@ -121,6 +121,47 @@ log_centralizer/
 
 ---
 
+
+---
+
+## ⚙️ Installation
+
+### 1. Cloner le projet
+```bash
+git clone https://github.com/sanogotech/logcentralbot.git
+cd logcentralbot
+````
+
+### 2. Créer un environnement virtuel
+
+```bash
+python3 -m venv venv
+source venv/bin/activate    # sous Linux/macOS
+venv\Scripts\activate       # sous Windows
+```
+
+### 3. Installer les dépendances
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 🚀 Lancement
+
+### 1. Lancer le serveur
+
+Par défaut, la base est **SQLite**. Tu peux changer le backend dans `server/config.py`.
+
+```bash
+python app.py --dbtype sqlite    # ou mysql ou mongodb
+```
+Le serveur démarre sur :
+👉 [http://localhost:5000](http://localhost:5000)
+
+---
+
 ## 🔁 Support multibase via `db_factory.py`
 
 ```python
