@@ -1,0 +1,44 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.so
+
+# ---- Environnements ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Logs ----
+*.log
+logs-*.txt
+
+# ---- Config sensibles ----
+server/__pycache__/
+server/*.db
+server/*.sqlite3
+server/config_local.py
+
+# ---- IDE / Éditeurs ----
+.vscode/
+.idea/
+*.iml
+
+# ---- Systèmes ----
+.DS_Store
+Thumbs.db
+
+# ---- Docker ----
+*.pid
+*.tar
+*.bak
+docker-compose.override.yml
+
+# ---- Tests / Coverage ----
+.coverage
+htmlcov/
+.tox/
+pytest_cache/
